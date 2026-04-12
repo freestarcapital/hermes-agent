@@ -75,7 +75,6 @@ from tools.browser_tool import cleanup_browser
 from hermes_constants import OPENROUTER_BASE_URL
 
 # Agent internals extracted to agent/ package for modularity
-from agent.vertex_adapter import get_vertex_config
 from agent.memory_manager import build_memory_context_block
 from agent.retry_utils import jittered_backoff
 from agent.error_classifier import classify_api_error, FailoverReason
@@ -915,48 +914,37 @@ class AIAgent:
                 # No explicit creds — use the centralized provider router
                 from agent.auxiliary_client import resolve_provider_client
                 
-                # Check for Vertex AI provider override
-                if self.provider == "vertex":
-                    vertex_token, vertex_url = get_vertex_config()
-                    if vertex_token and vertex_url:
-                        client_kwargs = {
-                            "api_key": vertex_token,
-                            "base_url": vertex_url
-                        }
-                    else:
-                        raise RuntimeError("Failed to resolve Vertex AI credentials. Run 'gcloud auth application-default login' or set credentials in config.yaml")
+                _routed_client, _ = resolve_provider_client(
+                    self.provider or "auto", model=self.model, raw_codex=True)
+                if _routed_client is not None:
+                    client_kwargs = {
+                        "api_key": _routed_client.api_key,
+                        "base_url": str(_routed_client.base_url),
+                    }
+                    # Preserve any default_headers the router set
+                    if hasattr(_routed_client, '_default_headers') and _routed_client._default_headers:
+                        client_kwargs["default_headers"] = dict(_routed_client._default_headers)
                 else:
-                    _routed_client, _ = resolve_provider_client(
-                        self.provider or "auto", model=self.model, raw_codex=True)
-                    if _routed_client is not None:
-                        client_kwargs = {
-                            "api_key": _routed_client.api_key,
-                            "base_url": str(_routed_client.base_url),
-                        }
-                        # Preserve any default_headers the router set
-                        if hasattr(_routed_client, '_default_headers') and _routed_client._default_headers:
-                            client_kwargs["default_headers"] = dict(_routed_client._default_headers)
-                    else:
-                        # When the user explicitly chose a non-OpenRouter provider
-                        # but no credentials were found, fail fast with a clear
-                        # message instead of silently routing through OpenRouter.
-                        _explicit = (self.provider or "").strip().lower()
-                        if _explicit and _explicit not in ("auto", "openrouter", "custom", "vertex"):
-                            raise RuntimeError(
-                                f"Provider '{_explicit}' is set in config.yaml but no API key "
-                                f"was found. Set the {_explicit.upper()}_API_KEY environment "
-                                f"variable, or switch to a different provider with `hermes model`."
-                            )
-                        # Final fallback: try raw OpenRouter key
-                        client_kwargs = {
-                            "api_key": os.getenv("OPENROUTER_API_KEY", ""),
-                            "base_url": OPENROUTER_BASE_URL,
-                            "default_headers": {
-                                "HTTP-Referer": "https://hermes-agent.nousresearch.com",
-                                "X-OpenRouter-Title": "Hermes Agent",
-                                "X-OpenRouter-Categories": "productivity,cli-agent",
-                            },
-                        }
+                    # When the user explicitly chose a non-OpenRouter provider
+                    # but no credentials were found, fail fast with a clear
+                    # message instead of silently routing through OpenRouter.
+                    _explicit = (self.provider or "").strip().lower()
+                    if _explicit and _explicit not in ("auto", "openrouter", "custom", "vertex"):
+                        raise RuntimeError(
+                            f"Provider '{_explicit}' is set in config.yaml but no API key "
+                            f"was found. Set the {_explicit.upper()}_API_KEY environment "
+                            f"variable, or switch to a different provider with `hermes model`."
+                        )
+                    # Final fallback: try raw OpenRouter key
+                    client_kwargs = {
+                        "api_key": os.getenv("OPENROUTER_API_KEY", ""),
+                        "base_url": OPENROUTER_BASE_URL,
+                        "default_headers": {
+                            "HTTP-Referer": "https://hermes-agent.nousresearch.com",
+                            "X-OpenRouter-Title": "Hermes Agent",
+                            "X-OpenRouter-Categories": "productivity,cli-agent",
+                        },
+                    }
             
             self._client_kwargs = client_kwargs  # stored for rebuilding after interrupt
 

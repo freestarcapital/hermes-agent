@@ -995,44 +995,6 @@ def _try_vertex() -> Tuple[Optional[OpenAI], Optional[str]]:
     logger.debug("Auxiliary client: Vertex AI (%s)", model)
     return OpenAI(api_key=token, base_url=base_url), model
 
-def _resolve_forced_provider(forced: str) -> Tuple[Optional[OpenAI], Optional[str]]:
-    """Resolve a specific forced provider.  Returns (None, None) if creds missing."""
-    if forced == "openrouter":
-        client, model = _try_openrouter()
-        if client is None:
-            logger.warning("auxiliary.provider=openrouter but OPENROUTER_API_KEY not set")
-        return client, model
-
-    if forced == "nous":
-        client, model = _try_nous()
-        if client is None:
-            logger.warning("auxiliary.provider=nous but Nous Portal not configured (run: hermes auth)")
-        return client, model
-
-    if forced == "codex":
-        client, model = _try_codex()
-        if client is None:
-            logger.warning("auxiliary.provider=codex but no Codex OAuth token found (run: hermes model)")
-        return client, model
-
-    if forced == "vertex":
-        client, model = _try_vertex()
-        if client is None:
-            logger.warning("auxiliary.provider=vertex but Vertex AI credentials not found")
-        return client, model
-
-    if forced == "main":
-        # "main" = skip OpenRouter/Nous, use the main chat model's credentials.
-        for try_fn in (_try_custom_endpoint, _try_codex, _resolve_api_key_provider):
-            client, model = try_fn()
-            if client is not None:
-                return client, model
-        logger.warning("auxiliary.provider=main but no main endpoint credentials found")
-        return None, None
-
-    # Unknown provider name — fall through to auto
-    logger.warning("Unknown auxiliary.provider=%r, falling back to auto", forced)
-    return None, None
 _AUTO_PROVIDER_LABELS = {
     "_try_openrouter": "openrouter",
     "_try_nous": "nous",
@@ -1068,7 +1030,6 @@ def _get_provider_chain() -> List[tuple]:
     on the ``_try_*`` functions are picked up correctly.
     """
     return [
-        ("vertex", _try_vertex),
         ("openrouter", _try_openrouter),
         ("nous", _try_nous),
         ("local/custom", _try_custom_endpoint),
@@ -1426,7 +1387,7 @@ def resolve_provider_client(
                            "GOOGLE_APPLICATION_CREDENTIALS or run "
                            "`gcloud auth application-default login`)")
             return None, None
-        final_model = model or default
+        final_model = _normalize_resolved_model(model or default, provider)
         return (_to_async_client(client, final_model) if async_mode
                 else (client, final_model))
 
