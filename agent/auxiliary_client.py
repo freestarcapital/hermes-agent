@@ -1417,6 +1417,19 @@ def resolve_provider_client(
         return (_to_async_client(client, final_model) if async_mode
                 else (client, final_model))
 
+    # ── Google Vertex AI (service account → dynamic token + project URL) ──
+    if provider == "vertex":
+        client, default = _try_vertex()
+        if client is None:
+            logger.warning("resolve_provider_client: vertex requested but "
+                           "Vertex AI credentials not found (set "
+                           "GOOGLE_APPLICATION_CREDENTIALS or run "
+                           "`gcloud auth application-default login`)")
+            return None, None
+        final_model = model or default
+        return (_to_async_client(client, final_model) if async_mode
+                else (client, final_model))
+
     # ── OpenAI Codex (OAuth → Responses API) ─────────────────────────
     if provider == "openai-codex":
         if raw_codex:

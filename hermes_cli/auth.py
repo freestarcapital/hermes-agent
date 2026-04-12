@@ -266,6 +266,14 @@ PROVIDER_REGISTRY: Dict[str, ProviderConfig] = {
         api_key_env_vars=("XIAOMI_API_KEY",),
         base_url_env_var="XIAOMI_BASE_URL",
     ),
+    "vertex": ProviderConfig(
+        id="vertex",
+        name="Google Vertex AI",
+        auth_type="api_key",
+        inference_base_url="https://aiplatform.googleapis.com/v1beta1",
+        api_key_env_vars=("GOOGLE_APPLICATION_CREDENTIALS", "VERTEX_CREDENTIALS_PATH"),
+        base_url_env_var="VERTEX_BASE_URL",
+    ),
 }
 
 
