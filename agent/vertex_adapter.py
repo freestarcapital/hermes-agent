@@ -96,6 +96,15 @@ def get_vertex_credentials(credentials_path: Optional[str] = None) -> Tuple[Opti
     except Exception as e:
         logger.error(f"Failed to resolve Vertex AI credentials: {e}")
         _creds_cache.pop(cache_key, None)
+
+        # If ADC failed (e.g. expired refresh token), try the SA file
+        # before giving up — it may have been added after initial startup.
+        if cache_key == "__adc__":
+            sa_path = _resolve_credentials_path(credentials_path)
+            if sa_path:
+                logger.info("ADC failed, retrying with service account: %s", sa_path)
+                return get_vertex_credentials(sa_path)
+
         return None, None
 
 
