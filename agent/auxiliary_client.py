@@ -991,8 +991,8 @@ def _try_vertex() -> Tuple[Optional[OpenAI], Optional[str]]:
     token, base_url = get_vertex_config()
     if not token or not base_url:
         return None, None
-    model = "gemini-1.5-pro" # default Vertex model for aux tasks
-    logger.debug("Auxiliary client: Vertex AI")
+    model = os.environ.get("VERTEX_AUXILIARY_MODEL") or "google/gemini-3-flash-preview"
+    logger.debug("Auxiliary client: Vertex AI (%s)", model)
     return OpenAI(api_key=token, base_url=base_url), model
 
 def _resolve_forced_provider(forced: str) -> Tuple[Optional[OpenAI], Optional[str]]:

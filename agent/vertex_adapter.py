@@ -5,10 +5,17 @@ endpoint. This allows Hermes to use Gemini models via Google Cloud with
 enterprise-grade rate limits and quotas.
 
 Requires: pip install google-auth
+
+Environment variables honored (all optional — ADC is used as a fallback):
+  GOOGLE_APPLICATION_CREDENTIALS — path to a service account JSON file.
+  VERTEX_CREDENTIALS_PATH        — alias, takes precedence if set.
+  VERTEX_PROJECT_ID              — override the project_id embedded in creds.
+  VERTEX_REGION                  — override default region ("global" unless set).
 """
 
 import logging
 import os
+import time
 from typing import Optional, Tuple
 
 try:
@@ -20,53 +27,99 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
-# Default Vertex AI settings
-DEFAULT_REGION = "us-central1"
+DEFAULT_REGION = "global"
+
+_creds_cache: dict = {}
+
+
+def _resolve_credentials_path(explicit: Optional[str]) -> Optional[str]:
+    if explicit and os.path.exists(explicit):
+        return explicit
+    for env_var in ("VERTEX_CREDENTIALS_PATH", "GOOGLE_APPLICATION_CREDENTIALS"):
+        path = os.environ.get(env_var)
+        if path and os.path.exists(path):
+            return path
+    return None
+
+
+def _refresh_credentials(creds) -> None:
+    auth_req = google.auth.transport.requests.Request()
+    creds.refresh(auth_req)
+
 
 def get_vertex_credentials(credentials_path: Optional[str] = None) -> Tuple[Optional[str], Optional[str]]:
-    """Get a Google Cloud access token and project ID.
-    
-    Returns (access_token, project_id) or (None, None) if auth fails.
+    """Return a (fresh access_token, project_id) pair or (None, None) on failure.
+
+    Caches the underlying Credentials object and refreshes it when within
+    5 minutes of expiry, so repeated calls don't thrash the token endpoint.
     """
     if google is None:
         logger.warning("google-auth package not installed. Cannot use Vertex AI.")
         return None, None
 
-    try:
-        if credentials_path and os.path.exists(credentials_path):
-            creds = service_account.Credentials.from_service_account_file(
-                credentials_path,
-                scopes=["https://www.googleapis.com/auth/cloud-platform"]
-            )
-            project_id = creds.project_id
-        else:
-            creds, project_id = google.auth.default(
-                scopes=["https://www.googleapis.com/auth/cloud-platform"]
-            )
+    resolved_path = _resolve_credentials_path(credentials_path)
+    cache_key = resolved_path or "__adc__"
 
-        auth_req = google.auth.transport.requests.Request()
-        creds.refresh(auth_req)
+    try:
+        cached = _creds_cache.get(cache_key)
+        if cached is None:
+            if resolved_path:
+                creds = service_account.Credentials.from_service_account_file(
+                    resolved_path,
+                    scopes=["https://www.googleapis.com/auth/cloud-platform"],
+                )
+                project_id = creds.project_id
+            else:
+                creds, project_id = google.auth.default(
+                    scopes=["https://www.googleapis.com/auth/cloud-platform"]
+                )
+            _creds_cache[cache_key] = (creds, project_id)
+        else:
+            creds, project_id = cached
+
+        needs_refresh = (
+            not getattr(creds, "token", None)
+            or getattr(creds, "expired", False)
+            or (
+                getattr(creds, "expiry", None) is not None
+                and (creds.expiry.timestamp() - time.time()) < 300
+            )
+        )
+        if needs_refresh:
+            _refresh_credentials(creds)
+
+        override_project = os.environ.get("VERTEX_PROJECT_ID")
+        if override_project:
+            project_id = override_project
+
         return creds.token, project_id
     except Exception as e:
         logger.error(f"Failed to resolve Vertex AI credentials: {e}")
+        _creds_cache.pop(cache_key, None)
         return None, None
 
+
 def build_vertex_base_url(project_id: str, region: str = DEFAULT_REGION) -> str:
-    """Build the OpenAI-compatible base URL for Vertex AI."""
-    return f"https://{region}-aiplatform.googleapis.com/v1beta1/projects/{project_id}/locations/{region}/endpoints/openapi"
+    """Build the OpenAI-compatible base URL for Vertex AI.
+
+    The `global` location uses a bare `aiplatform.googleapis.com` hostname,
+    while regional locations use `{region}-aiplatform.googleapis.com`.
+    Gemini 3.x preview models are only served via the global endpoint at
+    the time of writing.
+    """
+    host = "aiplatform.googleapis.com" if region == "global" else f"{region}-aiplatform.googleapis.com"
+    return f"https://{host}/v1beta1/projects/{project_id}/locations/{region}/endpoints/openapi"
+
 
 def get_vertex_config(
-    credentials_path: Optional[str] = None, 
-    region: Optional[str] = None
+    credentials_path: Optional[str] = None,
+    region: Optional[str] = None,
 ) -> Tuple[Optional[str], Optional[str]]:
-    """Resolve API key (token) and base URL for Vertex AI.
-    
-    Returns (access_token, base_url) or (None, None).
-    """
+    """Resolve (access_token, base_url) for Vertex AI, or (None, None) on failure."""
     token, project_id = get_vertex_credentials(credentials_path)
     if not token or not project_id:
         return None, None
-        
-    effective_region = region or DEFAULT_REGION
+
+    effective_region = region or os.environ.get("VERTEX_REGION") or DEFAULT_REGION
     base_url = build_vertex_base_url(project_id, effective_region)
     return token, base_url
