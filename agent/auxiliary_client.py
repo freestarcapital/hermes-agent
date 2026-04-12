@@ -46,6 +46,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from openai import OpenAI
 
 from agent.credential_pool import load_pool
+from agent.vertex_adapter import get_vertex_config
 from hermes_cli.config import get_hermes_home
 from hermes_constants import OPENROUTER_BASE_URL
 
@@ -986,6 +987,52 @@ def _try_anthropic() -> Tuple[Optional[Any], Optional[str]]:
     return AnthropicAuxiliaryClient(real_client, model, token, base_url, is_oauth=is_oauth), model
 
 
+def _try_vertex() -> Tuple[Optional[OpenAI], Optional[str]]:
+    token, base_url = get_vertex_config()
+    if not token or not base_url:
+        return None, None
+    model = "gemini-1.5-pro" # default Vertex model for aux tasks
+    logger.debug("Auxiliary client: Vertex AI")
+    return OpenAI(api_key=token, base_url=base_url), model
+
+def _resolve_forced_provider(forced: str) -> Tuple[Optional[OpenAI], Optional[str]]:
+    """Resolve a specific forced provider.  Returns (None, None) if creds missing."""
+    if forced == "openrouter":
+        client, model = _try_openrouter()
+        if client is None:
+            logger.warning("auxiliary.provider=openrouter but OPENROUTER_API_KEY not set")
+        return client, model
+
+    if forced == "nous":
+        client, model = _try_nous()
+        if client is None:
+            logger.warning("auxiliary.provider=nous but Nous Portal not configured (run: hermes auth)")
+        return client, model
+
+    if forced == "codex":
+        client, model = _try_codex()
+        if client is None:
+            logger.warning("auxiliary.provider=codex but no Codex OAuth token found (run: hermes model)")
+        return client, model
+
+    if forced == "vertex":
+        client, model = _try_vertex()
+        if client is None:
+            logger.warning("auxiliary.provider=vertex but Vertex AI credentials not found")
+        return client, model
+
+    if forced == "main":
+        # "main" = skip OpenRouter/Nous, use the main chat model's credentials.
+        for try_fn in (_try_custom_endpoint, _try_codex, _resolve_api_key_provider):
+            client, model = try_fn()
+            if client is not None:
+                return client, model
+        logger.warning("auxiliary.provider=main but no main endpoint credentials found")
+        return None, None
+
+    # Unknown provider name — fall through to auto
+    logger.warning("Unknown auxiliary.provider=%r, falling back to auto", forced)
+    return None, None
 _AUTO_PROVIDER_LABELS = {
     "_try_openrouter": "openrouter",
     "_try_nous": "nous",
@@ -1021,6 +1068,7 @@ def _get_provider_chain() -> List[tuple]:
     on the ``_try_*`` functions are picked up correctly.
     """
     return [
+        ("vertex", _try_vertex),
         ("openrouter", _try_openrouter),
         ("nous", _try_nous),
         ("local/custom", _try_custom_endpoint),
