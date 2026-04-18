@@ -103,6 +103,7 @@ AUTHOR_MAP = {
     "dangtc94@gmail.com": "dieutx",
     "jaisehgal11299@gmail.com": "jaisup",
     "percydikec@gmail.com": "PercyDikec",
+    "noonou7@gmail.com": "HenkDz",
     "dean.kerr@gmail.com": "deankerr",
     "socrates1024@gmail.com": "socrates1024",
     "satelerd@gmail.com": "satelerd",
@@ -241,6 +242,8 @@ AUTHOR_MAP = {
     "michel.belleau@malaiwah.com": "malaiwah",
     "gnanasekaran.sekareee@gmail.com": "gnanam1990",
     "jz.pentest@gmail.com": "0xyg3n",
+    "hypnosis.mda@gmail.com": "Hypn0sis",
+    "ywt000818@gmail.com": "OwenYWT",
     "dhandhalyabhavik@gmail.com": "v1k22",
     "rucchizhao@zhaochenfeideMacBook-Pro.local": "RucchiZ",
     "lehaolin98@outlook.com": "LehaoLin",
@@ -249,6 +252,12 @@ AUTHOR_MAP = {
     "bernylinville@devopsthink.org": "bernylinville",
     "brian@bde.io": "briandevans",
     "hubin_ll@qq.com": "LLQWQ",
+    "memosr_email@gmail.com": "memosr",
+    "anthhub@163.com": "anthhub",
+    "shenuu@gmail.com": "shenuu",
+    "xiayh17@gmail.com": "xiayh0107",
+    "asurla@nvidia.com": "anniesurla",
+    "limkuan24@gmail.com": "WideLee",
 }
 
 
