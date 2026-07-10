@@ -31,3 +31,4 @@ jobs:
           # named setup.py but isn't a real package - both are real bugs in
           # those files, not scan/CI problems. Excluding until fixed upstream.
           JF_PATH_EXCLUSIONS: "*hermes_cli*;*google-workspace/scripts*;*tests/skills*"
+          JF_SKIP_AUTOFIX: "true"
