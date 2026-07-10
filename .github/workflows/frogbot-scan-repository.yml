@@ -26,3 +26,8 @@ jobs:
           JF_ACCESS_TOKEN: ${{ secrets.JF_ACCESS_TOKEN }}
           JF_GIT_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           JF_GIT_BASE_BRANCH: ${{ matrix.branch }}
+          # hermes_cli's setup.py imports itself before install (breaks pip's
+          # build isolation), and the google-workspace OAuth helper script is
+          # named setup.py but isn't a real package - both are real bugs in
+          # those files, not scan/CI problems. Excluding until fixed upstream.
+          JF_PATH_EXCLUSIONS: "*hermes_cli*;*google-workspace/scripts*"
